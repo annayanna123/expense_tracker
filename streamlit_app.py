@@ -54,83 +54,91 @@ except (KeyError, StreamlitSecretNotFoundError):
 	st.error("Supabase secrets are not configured. Add SUPABASE_URL and SUPABASE_KEY to continue.")
 	st.stop()
 
-user_id = render_authentication(supabase)
+user_id = st.session_state.get("auth_user_id")
 if user_id is None:
-	st.stop()
-
-header_left, header_right = st.columns([5, 1])
-with header_left:
-	st.markdown('<div class="eyebrow">YOUR OVERVIEW</div>', unsafe_allow_html=True)
-with header_right:
-	st.caption(st.session_state.get("auth_email", ""))
-	logout = st.button("Log out", key="logout")
-if logout:
-	try:
-		supabase.auth.sign_out()
-	finally:
-		st.session_state.pop("auth_user_id", None)
-		st.session_state.pop("auth_email", None)
-		st.session_state.pop("supabase_client", None)
-		st.rerun()
-
-
-st.markdown('<div class="section-title">Add an expense</div>', unsafe_allow_html=True)
-with st.form("add_expense"):
-	category_column, amount_column, date_column, submit_column = st.columns([2, 1.2, 1.5, 1])
-	category = category_column.text_input("Category", placeholder="e.g. Groceries")
-	amount = amount_column.number_input("Amount (Php)", min_value=0.01, value=0.01, step=1.0)
-	expense_date = date_column.date_input("Date", value=date.today())
-	submitted = submit_column.form_submit_button("Add expense", type="primary")
-
-if submitted:
-	try:
-		insert_database_expense(supabase, user_id, category, amount, expense_date.isoformat())
-		st.success("Expense added.")
-		st.rerun()
-	except ValueError as error:
-		st.error(f"Invalid expense: {error}")
-	except Exception:
-		logger.exception("Supabase expense insert failed")
-		st.error("Could not save the expense. Check your database connection and table permissions.")
-
-try:
-	expenses = load_database_expenses(supabase, user_id)
-except Exception:
-	logger.exception("Supabase expense query failed")
-	st.error("Could not load expenses. Check your database connection and table permissions.")
-	st.stop()
-
-if expenses:
-	total = sum(expense["amount"] for expense in expenses)
-	month_prefix = date.today().strftime("%Y-%m")
-	month_total = sum(
-		expense["amount"] for expense in expenses
-		if str(expense["date"]).startswith(month_prefix)
-	)
-	st.markdown('<div class="section-title">At a glance</div>', unsafe_allow_html=True)
-	metric_month, metric_total, metric_count = st.columns(3)
-	metric_month.metric("This month", f"Php {month_total:,.2f}")
-	metric_total.metric("All time", f"Php {total:,.2f}")
-	metric_count.metric("Expenses", f"{len(expenses):,}")
-
-	st.markdown('<div class="section-title">Recent expenses</div>', unsafe_allow_html=True)
-	categories = sorted({expense["category"] for expense in expenses})
-	selected_category = st.selectbox("Filter by category", ["All categories", *categories])
-	visible_expenses = expenses
-	if selected_category != "All categories":
-		visible_expenses = [expense for expense in expenses if expense["category"] == selected_category]
-	display_rows = [
-		{"Date": expense["date"], "Category": expense["category"], "Amount": expense["amount"]}
-		for expense in visible_expenses
-	]
-	st.dataframe(
-		display_rows,
-		hide_index=True,
-		width="stretch",
-		column_config={"Amount": st.column_config.NumberColumn("Amount", format="Php %.2f")},
-	)
+	account_tab, expenses_tab = st.tabs(["Account", "Expenses"])
 else:
-	st.markdown('<div class="section-title">At a glance</div>', unsafe_allow_html=True)
-	st.metric("Expenses", "0")
-	st.markdown('<div class="section-title">Recent expenses</div>', unsafe_allow_html=True)
-	st.info("No expenses yet. Add your first expense above.")
+	expenses_tab, account_tab = st.tabs(["Expenses", "Account"])
+
+with account_tab:
+	if user_id is None:
+		user_id = render_authentication(supabase)
+	else:
+		st.markdown('<div class="section-title">Your account</div>', unsafe_allow_html=True)
+		st.write(st.session_state.get("auth_username") or "Expense tracker member")
+		st.caption(st.session_state.get("auth_email", ""))
+		if st.button("Log out", key="logout"):
+			try:
+				supabase.auth.sign_out()
+			finally:
+				st.session_state.pop("auth_user_id", None)
+				st.session_state.pop("auth_username", None)
+				st.session_state.pop("auth_email", None)
+				st.session_state.pop("supabase_client", None)
+				st.rerun()
+
+with expenses_tab:
+	if user_id is None:
+		st.info("Log in or create an account in the Account tab to view and add expenses.")
+	else:
+		st.markdown('<div class="eyebrow">YOUR OVERVIEW</div>', unsafe_allow_html=True)
+		st.markdown('<div class="section-title">Add an expense</div>', unsafe_allow_html=True)
+		with st.form("add_expense"):
+			category_column, amount_column, date_column, submit_column = st.columns([2, 1.2, 1.5, 1])
+			category = category_column.text_input("Category", placeholder="e.g. Groceries")
+			amount = amount_column.number_input("Amount (Php)", min_value=0.01, value=0.01, step=1.0)
+			expense_date = date_column.date_input("Date", value=date.today())
+			submitted = submit_column.form_submit_button("Add expense", type="primary")
+
+		if submitted:
+			try:
+				insert_database_expense(supabase, user_id, category, amount, expense_date.isoformat())
+				st.success("Expense added.")
+				st.rerun()
+			except ValueError as error:
+				st.error(f"Invalid expense: {error}")
+			except Exception:
+				logger.exception("Supabase expense insert failed")
+				st.error("Could not save the expense. Check your database connection and table permissions.")
+
+		try:
+			expenses = load_database_expenses(supabase, user_id)
+		except Exception:
+			logger.exception("Supabase expense query failed")
+			st.error("Could not load expenses. Check your database connection and table permissions.")
+			st.stop()
+
+		if expenses:
+			total = sum(expense["amount"] for expense in expenses)
+			month_prefix = date.today().strftime("%Y-%m")
+			month_total = sum(
+				expense["amount"] for expense in expenses
+				if str(expense["date"]).startswith(month_prefix)
+			)
+			st.markdown('<div class="section-title">At a glance</div>', unsafe_allow_html=True)
+			metric_month, metric_total, metric_count = st.columns(3)
+			metric_month.metric("This month", f"Php {month_total:,.2f}")
+			metric_total.metric("All time", f"Php {total:,.2f}")
+			metric_count.metric("Expenses", f"{len(expenses):,}")
+
+			st.markdown('<div class="section-title">Recent expenses</div>', unsafe_allow_html=True)
+			categories = sorted({expense["category"] for expense in expenses})
+			selected_category = st.selectbox("Filter by category", ["All categories", *categories])
+			visible_expenses = expenses
+			if selected_category != "All categories":
+				visible_expenses = [expense for expense in expenses if expense["category"] == selected_category]
+			display_rows = [
+				{"Date": expense["date"], "Category": expense["category"], "Amount": expense["amount"]}
+				for expense in visible_expenses
+			]
+			st.dataframe(
+				display_rows,
+				hide_index=True,
+				width="stretch",
+				column_config={"Amount": st.column_config.NumberColumn("Amount", format="Php %.2f")},
+			)
+		else:
+			st.markdown('<div class="section-title">At a glance</div>', unsafe_allow_html=True)
+			st.metric("Expenses", "0")
+			st.markdown('<div class="section-title">Recent expenses</div>', unsafe_allow_html=True)
+			st.info("No expenses yet. Add your first expense above.")

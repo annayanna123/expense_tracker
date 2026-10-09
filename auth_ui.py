@@ -2,10 +2,16 @@ import streamlit as st
 
 
 def render_authentication(client):
-	st.subheader("Account")
-	login_tab, signup_tab = st.tabs(["Log in", "Sign up"])
+	st.subheader("Account access")
+	account_action = st.radio(
+		"Choose an account action",
+		["Log in", "Sign up"],
+		horizontal=True,
+		label_visibility="collapsed",
+		key="account_action",
+	)
 
-	with login_tab:
+	if account_action == "Log in":
 		with st.form("login_form"):
 			email = st.text_input("Email", key="login_email")
 			password = st.text_input("Password", type="password", key="login_password")
@@ -21,11 +27,12 @@ def render_authentication(client):
 				else:
 					st.session_state["auth_user_id"] = str(response.user.id)
 					st.session_state["auth_email"] = response.user.email or email.strip()
+					st.session_state["auth_username"] = (response.user.user_metadata or {}).get("username", "")
 					st.rerun()
 			except Exception:
 				st.error("Could not log in. Check the email and password, then try again.")
 
-	with signup_tab:
+	else:
 		with st.form("signup_form"):
 			username = st.text_input("Username", key="signup_username")
 			email = st.text_input("Email", key="signup_email")
@@ -51,6 +58,7 @@ def render_authentication(client):
 					if response.session is not None and response.user is not None:
 						st.session_state["auth_user_id"] = str(response.user.id)
 						st.session_state["auth_email"] = response.user.email or email.strip()
+						st.session_state["auth_username"] = username.strip()
 						st.rerun()
 					st.success("Account created. Check your email to confirm it, then log in.")
 				except Exception:
