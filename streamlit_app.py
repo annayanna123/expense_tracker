@@ -1,8 +1,12 @@
+import logging
+
 import streamlit as st
 from streamlit.errors import StreamlitSecretNotFoundError
 from supabase import create_client
 
 from expense_data import insert_database_expense, load_database_expenses
+
+logger = logging.getLogger(__name__)
 
 st.set_page_config(page_title="Expense Tracker", page_icon="💸")
 st.title("Expense Tracker")
@@ -38,11 +42,13 @@ if submitted:
 	except ValueError as error:
 		st.error(f"Invalid expense: {error}")
 	except Exception:
+		logger.exception("Supabase expense insert failed")
 		st.error("Could not save the expense. Check your database connection and table permissions.")
 
 try:
 	expenses = load_database_expenses(supabase)
 except Exception:
+	logger.exception("Supabase expense query failed")
 	st.error("Could not load expenses. Check your database connection and table permissions.")
 	st.stop()
 
