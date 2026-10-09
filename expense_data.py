@@ -27,6 +27,35 @@ def load_expenses():
     return expenses
 
 
+def load_database_expenses(client):
+    rows = (
+        client.table("expenses")
+        .select("expenses_id, category, amount, expense_date")
+        .order("expense_date", desc=True)
+        .execute()
+        .data
+    ) or []
+    return [
+        {
+            "expenses_id": row["expenses_id"],
+            "category": row["category"],
+            "amount": float(row["amount"]),
+            "date": row["expense_date"],
+        }
+        for row in rows
+    ]
+
+
+def insert_database_expense(client, category, amount, expense_date):
+    expense = validate_expense(category, amount, expense_date)
+    client.table("expenses").insert({
+        "category": expense["category"],
+        "amount": expense["amount"],
+        "expense_date": expense["date"],
+    }).execute()
+    return expense
+
+
 def validate_expense(category, amount, expense_date):
     category = category.strip()
     if not category:
