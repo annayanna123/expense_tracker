@@ -27,10 +27,11 @@ def load_expenses():
     return expenses
 
 
-def load_database_expenses(client):
+def load_database_expenses(client, user_id):
     rows = (
         client.table("expenses")
         .select("expenses_id, category, amount, expense_date")
+        .eq("user_id", user_id)
         .order("expense_date", desc=True)
         .execute()
         .data
@@ -46,9 +47,10 @@ def load_database_expenses(client):
     ]
 
 
-def insert_database_expense(client, category, amount, expense_date):
+def insert_database_expense(client, user_id, category, amount, expense_date):
     expense = validate_expense(category, amount, expense_date)
     client.table("expenses").insert({
+        "user_id": user_id,
         "category": expense["category"],
         "amount": expense["amount"],
         "expense_date": expense["date"],
